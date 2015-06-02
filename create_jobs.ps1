@@ -18,17 +18,17 @@ if ( (Get-PSSnapin -Name VMware.VimAutomation.Core -ErrorAction SilentlyContinue
 }
 
 # backup storage - local dedupe disk in our case
-$RepoName = "LOCAL3"
+$RepoName = "LOCAL1"
 # vcenters list (load VM and resource pools)
-$vCenterServers = ("vc.ro.vutbr.cz")
+$vCenterServers = ("vcenter.cloud.vutbr.cz")
 # excluded resource pools
-$pools_for_exclude = ("smetiste", "repliacas", "backup", "sandbox", "View-WIN7", "View-WIN8", "View-FBM", "VIEW")
+$pools_for_exclude = ("smetiste", "replicas", "backup", "sandbox", "View-WIN7", "View-WIN8", "View-FBM", "VIEW")
 # number of the job that are running in parallel
-$parallel_num = 3
+$parallel_num = 2
 # first VM backup in each of the thread / stream
 $StartTime = ('19:00:00')
 # number of backups / restore points
-$restore_points_num = 90
+$restore_points_num = 110
 # load object repository by names
 $Repo = Get-VBRBackupRepository -Name $RepoName 
 # list of backup jobs (VMs) that this program will fill up and at the end of the script, then all of the jobs that are not in this list will be removed
@@ -75,7 +75,7 @@ foreach ($job_type in $job_types_do)
         
             write-host ""
             write-host "Processing VM $vm_name"
-            write-host "=============================================================================="
+            write-host "================================================================================="
         
             # default state is backup all VMs
             $do_backup = $true
@@ -104,6 +104,7 @@ foreach ($job_type in $job_types_do)
                 {
                     foreach ($expool in $pools_for_exclude)
                     { # check if VM is in some excluded resource pool
+
                         if (($rp.name.ToUpper()) -eq ($expool.ToUpper()))
                         { # VM is in excluded resource pool, we omit this VM from backup
                             write-host "exclude VM $vm_name from backups (VM is in RP $rp)"
@@ -127,14 +128,21 @@ foreach ($job_type in $job_types_do)
                     }
                 }
         
-                write-host "+++ Setting backup job number $jobcounter (par #$stream) for VM $vm_name"
-                write-host "=============================================================================="
+                write-host "+++ Setting backup job number $jobcounter (par #$stream) for VM $vm_name (in $rp)"
+                write-host "================================================================================="
         
                 if (!$Job)
                 { # create new backup job
                     write-host "Create new job backup for VM $vm_name" -foregroundcolor "green"
                     $ServerEntity = $VBR_VMs | ?{($_.Name -eq $vm_name)}
-                    $Job = Add-VBRViBackupJob -Name $JobName -BackupRepository ($Repo) -Entity ($ServerEntity)
+                    if ($ServerEntity -ne $null)
+                    {
+                        $Job = Add-VBRViBackupJob -Name $JobName -BackupRepository ($Repo) -Entity ($ServerEntity)
+                    }
+                    else
+                    {
+                        write-host "Server not found in VEEAM, please check VEEAM configuration!" -foregroundcolor "red"
+                    }
                 }
 
                 if ($Job)
@@ -296,13 +304,13 @@ foreach ($job_type in $job_types_do)
         Disconnect-VIServer -confirm:$false
     }
 
-    # final cleening    
-    foreach ($Job in $BackupJobsInVeeam)
-    { # search existing job
-        if (!($LeaveJobs.ContainsKey($Job.name)))
-        { # we don't need this backup job
-            write-host "Deleting existing backup job " + $Job.name + "!" -foregroundcolor "red"  
-            Remove-VBRJob -Job $Job -Confirm:$false
-        }
-    }
+    ## final cleening
+    #foreach ($Job in $BackupJobsInVeeam)
+    #{ # search existing job
+    #    if (!($LeaveJobs.ContainsKey($Job.name)))
+    #    { # we don't need this backup job
+    #        write-host "Deleting existing backup job " + $Job.name + "!" -foregroundcolor "red"  
+    #        Remove-VBRJob -Job $Job -Confirm:$false
+    #    }
+    #}
 }
